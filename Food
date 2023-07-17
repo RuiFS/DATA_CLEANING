@@ -1,0 +1,146 @@
+-- Data Cleaning
+USE data_cleaning;
+SELECT * FROM food_coded;
+DESCRIBE food_coded;
+
+-- add a primay key
+ALTER TABLE food_coded
+ADD COLUMN id INT auto_increment PRIMARY KEY FIRST;
+
+-- Looking at our table it's possible to see several problems, for example the nulls appear as 'nan' the gender is in numerical form, 1 for females and 2 for male.
+-- Nulls
+UPDATE food_coded
+SET
+    calories_day = NULLIF(calories_day, 'nan'),
+    comfort_food = NULLIF(comfort_food, 'nan'),
+    comfort_food_reasons = NULLIF(comfort_food_reasons, 'nan'),
+    cuisine = NULLIF(cuisine, 'nan'),
+    diet_current = NULLIF(diet_current, 'nan'),
+    eating_changes = NULLIF(eating_changes, 'nan'),
+    father_profession = NULLIF(father_profession, 'nan'),
+    fav_cuisine = NULLIF(fav_cuisine, 'nan'),
+    food_childhood = NULLIF(food_childhood, 'nan'),
+    healthy_meal = NULLIF(healthy_meal, 'nan'),
+    ideal_diet = NULLIF(ideal_diet, 'nan'),
+    meals_dinner_friend = NULLIF(meals_dinner_friend, 'nan'),
+    mother_profession = NULLIF(mother_profession, 'nan'),
+    type_sports = NULLIF(type_sports, 'nan'),
+    weight = NULLIF(weight, 'nan');
+
+-- Gender columns, changing te record to male and female
+ALTER TABLE food_coded
+ADD COLUMN Genders VARCHAR(10);
+UPDATE food_coded
+SET Genders = CASE  Gender
+ WHEN 1 THEN 'Male' 
+ ELSE 'Female'
+ END;
+
+-- confort food with several record for row and some names are upper case and other are lower case
+
+-- confort food reasons has several answers per string, some are lower case and some are upper case also we need to change the 'and' or 'or' to commas
+UPDATE food_coded
+SET
+comfort_food_reasons = REPLACE(comfort_food_reasons,' and ',','),
+comfort_food_reasons = REPLACE(comfort_food_reasons,' or ',',');
+
+CREATE TABLE comfort_food_reasons(
+id INT PRIMARY KEY,
+reason_1 VARCHAR(255),
+reason_2 VARCHAR(255),
+reason_3 VARCHAR(255));
+INSERT INTO comfort_food_reasons (id, reason_1, reason_2, reason_3)
+SELECT id,
+    SUBSTRING_INDEX(comfort_food_reasons, ',', 1) AS reason_1,
+    IF(LOCATE(',', comfort_food_reasons) > 0,
+       SUBSTRING_INDEX(SUBSTRING_INDEX(comfort_food_reasons, ',', 2), ',', -1),
+       '') AS reason_2,
+    IF(LOCATE(',', comfort_food_reasons) > 1,
+       SUBSTRING_INDEX(SUBSTRING_INDEX(comfort_food_reasons, ',', 3), ',', -1),
+       '') AS reason_3
+FROM food_coded;
+SELECT * FROM comfort_food_reasons;
+
+-- marital_status has 1 and 2, change to marry/single
+ALTER TABLE food_coded
+ADD COLUMN marital_status_char VARCHAR(10);
+UPDATE food_coded
+SET marital_status_char =CASE marital_status
+WHEN 1 THEN 'married'
+ELSE 'single'
+END;
+-- meals_dinner_friend have more than 1 meal per record, so we will create a new table with the different foods in different tables
+CREATE TABLE meals_dinner_with_friends (
+id INT PRIMARY KEY, 
+meal_1 VARCHAR(255),
+meal_2 VARCHAR(255),
+meal_3 VARCHAR(255));
+INSERT INTO meals_dinner_with_friends (id, meal_1, meal_2, meal_3)
+SELECT id,
+    SUBSTRING_INDEX(meals_dinner_friend, ',', 1) AS meal_1,
+    IF(LOCATE(',', meals_dinner_friend) > 0,
+       SUBSTRING_INDEX(SUBSTRING_INDEX(meals_dinner_friend, ',', 2), ',', -1),
+       NULL) AS meal_2,
+    IF(LOCATE(',', meals_dinner_friend) > 1,
+       SUBSTRING_INDEX(SUBSTRING_INDEX(meals_dinner_friend, ',', 3), ',', -1),
+       NULL) AS meal_3
+FROM food_coded
+LIMIT 0, 1000;
+SELECT * FROM meals_dinner_with_friends;
+
+-- mother profession, has problems with the capital letters
+SELECT id, mother_profession FROM food_coded;
+UPDATE food_coded
+SET mother_profession = CONCAT(UPPER(SUBSTRING(mother_profession,1,1)),SUBSTRING(mother_profession,2));
+
+-- type_sports have lots of problems, some sports are separated by a comma others by 'and' and some by spaces (this does not follow any pattern) will start by changing everything to commas, 
+    -- Replacing 'and' by commas 	
+	SELECT id, type_sports FROM food_coded;
+    UPDATE food_coded
+    SET type_sports = REPLACE(type_sports,' and ',' , '),
+	type_sports = REPLACE(type_sports,', ,',' , ');
+    
+    -- Now we swithc the record with 'None' and 'none' by NULL values
+      UPDATE food_coded
+      SET type_sports = REGEXP_REPLACE(type_sports,'^(None|none)',NULL)
+      WHERE type_sports REGEXP '^(None|none)';
+      
+      -- Create a new table with only one sport by column
+     CREATE TABLE sports (id INT PRIMARY KEY, sport_1 VARCHAR(255), sport_2 VARCHAR(255), sport_3 VARCHAR(255), sport_4 VARCHAR(255));
+     INSERT INTO sports (id, sport_1, sport_2, sport_3, sport_4)
+     SELECT id, 
+      SUBSTRING_INDEX(type_sports,',',1) AS sport_1,
+      IF(LOCATE(',',type_sports)>0,SUBSTRING_INDEX(SUBSTRING_INDEX(type_sports,',',2),',',-1),NULL) AS sport_2,
+      IF(LOCATE(',',type_sports)>1,SUBSTRING_INDEX(SUBSTRING_INDEX(type_sports,',',3),',',-1),NULL) AS sport_3,
+      IF(LOCATE(',',type_sports)>1,SUBSTRING_INDEX(SUBSTRING_INDEX(type_sports,',',4),',',-1),NULL) AS sport_4
+      FROM food_coded;
+      SELECT * FROM sports;
+      
+      -- Looking at the new table there is still some issues with spaces and before the sport and repeated records
+      UPDATE sports
+      SET sport_1 = TRIM(sport_1),
+      sport_2 = TRIM(sport_2),
+      sport_3 = TRIM(sport_3),
+      sport_4 = TRIM(sport_4);
+      
+      UPDATE sports
+      SET sport_3 = IF(sport_2=sport_3, NULL, sport_3),
+      sport_4 = IF(sport_2 = sport_4, NULL, sport_4);
+      
+-- weight colum, some records are strings and some have 'lbs' at the end
+
+SELECT id, weight FROM food_coded;
+UPDATE food_coded
+SET weight = REPLACE(weight, 'lbs', '');
+
+UPDATE food_coded
+SET weight = NULL
+WHERE weight REGEXP '^[a-z]';
+
+ALTER TABLE food_coded MODIFY weight INTEGER;
+
+-- Since I'm European I would like to create a new column with weight measured in KG's 
+
+ALTER TABLE food_coded ADD COLUMN weight_KG int;
+UPDATE food_coded
+SET weight_KG = weight*0.45359237;
