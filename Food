@@ -1,4 +1,4 @@
--- Data Cleaning
+-- MySQL
 USE data_cleaning;
 SELECT * FROM food_coded;
 DESCRIBE food_coded;
@@ -37,6 +37,8 @@ SET Genders = CASE  Gender
  END;
 
 -- confort food with several record for row and some names are upper case and other are lower case
+UPDATE food_coded
+SET comfort_food = CONCAT(SUBSTRING(comfort_food,1,1),LOWER(SUBSTRING(comfort_food,2)));
 
 -- confort food reasons has several answers per string, some are lower case and some are upper case also we need to change the 'and' or 'or' to commas
 UPDATE food_coded
