@@ -1,0 +1,149 @@
+USE data_cleaning;
+SELECT * FROM contratos;
+
+-- Set blank records as NULL
+UPDATE contratos
+SET `Data de CelebraÃ§Ã£o do Contrato` = null
+WHERE `Data de CelebraÃ§Ã£o do Contrato` = '';
+UPDATE contratos
+SET `Data de Fecho do Contrato` = null
+WHERE `Data de Fecho do Contrato`='';
+UPDATE contratos
+SET `Procedimento Centralizado` = null
+WHERE `Procedimento Centralizado` = '';
+UPDATE contratos 
+SET`LigaÃ§Ã£o para PeÃ§as do Procedimento` = NULL
+WHERE `LigaÃ§Ã£o para PeÃ§as do Procedimento` = '';
+
+-- the row "Objeto do Contrato" have some records with Upper cases and others only lower cases, standartize to only the character with 
+-- upper case
+
+UPDATE contratos
+SET `Objeto do Contrato` = CONCAT(UPPER(SUBSTRING(`Objeto do Contrato`,1,1)),LOWER(SUBSTRING(`Objeto do Contrato`,2)));
+
+-- "CPV valor" should be a numeric column and not a text one, removing the € sign and change the data type to integer, some records appear like "'4126.34  | 21333.66  | 21740.0'"
+-- sum the values
+
+ALTER TABLE contratos
+RENAME COLUMN `CPV Valor` TO `CPV Valor (€)`;
+
+UPDATE contratos
+SET `CPV Valor (€)` = REPLACE (`CPV Valor (€)`,' €','');
+
+	-- Spliting the values to sum them
+    ALTER TABLE contratos
+    ADD COLUMN CPV_1 VARCHAR(20),
+    ADD COLUMN CPV_2 VARCHAR(20),
+    ADD COLUMN CPV_3 VARCHAR(20);
+    
+    UPDATE contratos
+    SET CPV_1 = CASE WHEN `CPV Valor (€)` LIKE '%|%' THEN TRIM(SUBSTRING_INDEX(`CPV Valor (€)`,'|',1)) ELSE `CPV Valor (€)` END,
+    CPV_2 = CASE WHEN `CPV Valor (€)` LIKE '%|%' THEN TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(`CPV Valor (€)`,'|',2),'|',-1)) ELSE NULL END,
+    CPV_3 = CASE WHEN `CPV Valor (€)` LIKE '%|%' THEN TRIM(SUBSTRING_INDEX(`CPV Valor (€)`,'|',-1)) ELSE NULL END;
+    
+    UPDATE contratos
+	SET CPV_1 = CASE WHEN CPV_1 = 'Inexistente' THEN NULL
+	ELSE CPV_1
+	END;
+	UPDATE contratos
+	SET CPV_2 = CASE WHEN CPV_2 = 'Inexistente' THEN NULL
+	ELSE CPV_2
+	END;
+	UPDATE contratos
+	SET CPV_3 = CASE WHEN CPV_3 = 'Inexistente' THEN NULL
+	ELSE CPV_3
+	END;
+	SELECT `CPV Valor (€)`, CPV_1, CPV_2, CPV_3, CPV_total_€ FROM contratos;
+    
+    ALTER TABLE contratos
+    ADD COLUMN CPV_total_€ DOUBLE,
+    MODIFY CPV_1 DOUBLE,
+    MODIFY CPV_2 DOUBLE,
+    MODIFY CPV_3 DOUBLE;
+    
+    UPDATE contratos
+    SET CPV_total_€ = COALESCE(CPV_1,0) + COALESCE(CPV_2,0) + COALESCE(CPV_3,0);
+    
+-- "Entidade(s) Adjudicante(s)" has the entity identifiation number between (), separate the colum into 2 columns, the entity name and the entity number
+ALTER TABLE contratos
+ADD COLUMN Entidade_adjudicante_nome VARCHAR(100),
+ADD COLUMN NIF_Entidades_Adjudicantes INT;
+
+UPDATE contratos
+SET Entidade_adjudicante_nome = SUBSTRING_INDEX(`Entidade(s) Adjudicante(s)`,'(', 1);
+
+UPDATE contratos 
+SET NIF_Entidades_Adjudicantes = SUBSTRING_INDEX(SUBSTRING_INDEX(`Entidade(s) Adjudicante(s)`, '(', -1), ')', 1);
+
+
+-- "Entidade(s) Adjudictairia(s)" has the entity identifiation number between (), separate the colum into 2 columns, the entity name and the entity number
+ALTER TABLE contratos
+ADD COLUMN Entidade_adjudictarias_nome VARCHAR(100),
+ADD COLUMN NIF_Entidades_Adjudictarias VARCHAR(20);
+
+UPDATE contratos
+SET Entidade_adjudictarias_nome = SUBSTRING_INDEX(`Entidade(s) AdjudicatÃ¡ria(s)`,'(', 1);
+
+UPDATE contratos 
+SET NIF_Entidades_Adjudictarias = SUBSTRING_INDEX(SUBSTRING_INDEX(`Entidade(s) AdjudicatÃ¡ria(s)`, '(', -1), ')', 1)
+WHERE `Entidade(s) AdjudicatÃ¡ria(s)` LIKE '%(%';
+
+-- "Preço Contratual" should be a numeric column and not a text one, removing the € sign and change the data type to integer
+UPDATE contratos
+SET `PreÃ§o Contratual` = TRIM(REPLACE(`PreÃ§o Contratual`,'€',''));
+
+ALTER TABLE contratos
+MODIFY `PreÃ§o Contratual` DOUBLE;
+SELECT `PreÃ§o Contratual` FROM contratos;
+
+-- "`Data de CelebraÃ§Ã£o do Contrato", "`Prazo de ExecuÃ§Ã£o" and "`Data de Fecho do Contrato" are date, change to the correct date type
+SELECT `Data de PublicaÃ§Ã£o` FROM contratos;
+ALTER TABLE contratos
+ADD COLUMN Data_de_Publicação DATE;
+
+UPDATE contratos
+SET Data_de_Publicação = STR_TO_DATE(Data_de_Publicação, '%d/%m/%Y');
+SELECT `Data de PublicaÃ§Ã£o` FROM contratos;
+SELECT length(`Data de PublicaÃ§Ã£o`) FROM contratos;
+
+-- Update the column data type to DATE
+
+UPDATE contratos
+SET `Data de PublicaÃ§Ã£o` = DATE_FORMAT(STR_TO_DATE(`Data de PublicaÃ§Ã£o`, '%d/%m/%Y'), '%Y-%m-%d'),
+`Data de CelebraÃ§Ã£o do Contrato` = DATE_FORMAT(STR_TO_DATE(`Data de CelebraÃ§Ã£o do Contrato`,'%d/%m/%Y'), '%Y-%m-%d'),
+`Data de Fecho do Contrato` = DATE_FORMAT(STR_TO_DATE(`Data de Fecho do Contrato`,'%d/%m/%Y'), '%Y-%m-%d');
+ 
+ ALTER TABLE contratos
+MODIFY `Data de Fecho do Contrato` DATE,
+MODIFY `Data de CelebraÃ§Ã£o do Contrato` DATE,
+MODIFY `Data de PublicaÃ§Ã£o` DATE;
+
+DESCRIBE contratos;
+-- "Prazo de Execução" is set on the (number of days, days) remove "dias" (Days) and change the data type to integer
+UPDATE contratos
+SET `Prazo de ExecuÃ§Ã£o` = TRIM(REPLACE(`Prazo de ExecuÃ§Ã£o`,'dias', ''));
+ALTER TABLE contratos
+MODIFY `Prazo de ExecuÃ§Ã£o` INT;
+ALTER TABLE contratos
+RENAME COLUMN `Prazo de ExecuÃ§Ã£o` to `Prazo de ExecuÃ§Ã£o (dias)`;
+
+-- "Local de Execução" is set as (Country, District, City), separate to 3 different columns 
+ALTER TABLE contratos
+ADD COLUMN Country_of_execution VARCHAR(100),
+ADD COLUMN District_of_execution VARCHAR(100),
+ADD COLUMN City_of_execution VARCHAR(100);
+
+UPDATE contratos
+SET Country_of_execution = SUBSTRING_INDEX(`Local de ExecuÃ§Ã£o`,',',1),
+	District_of_execution = SUBSTRING_INDEX(SUBSTRING_INDEX(`Local de ExecuÃ§Ã£o`,',',-2),',',1),
+    City_of_execution = SUBSTRING_INDEX(SUBSTRING_INDEX(`Local de ExecuÃ§Ã£o`,',',-1),',',-1);
+
+SELECT `Local de ExecuÃ§Ã£o`, Country_of_execution,District_of_execution,City_of_execution FROM contratos;
+
+-- "groupMembers","PreÃ§o Total Efetivo","Causas das AlteraÃ§Ãµes ao Prazo", "Causas das AlteraÃ§Ãµes ao PreÃ§o","Estado" and "Causa de ExtinÃ§Ã£o do Contrato"  has no records, delete this columns
+ALTER TABLE contratos DROP COLUMN groupMembers;
+ALTER TABLE contratos DROP COLUMN `PreÃ§o Total Efetivo`;
+ALTER TABLE contratos DROP COLUMN `Causas das AlteraÃ§Ãµes ao Prazo`;
+ALTER TABLE contratos DROP COLUMN `Causas das AlteraÃ§Ãµes ao PreÃ§o`;
+ALTER TABLE contratos DROP COLUMN Estado;
+ALTER TABLE contratos DROP COLUMN `Causa de ExtinÃ§Ã£o do Contrato`;
